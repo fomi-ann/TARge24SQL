@@ -1789,3 +1789,617 @@ end
 -- Esimene on parameeter on veateate sisu, teine on veataseme nr
 -- (nr 16 tähendab üldiseid vigu),
 -- kolmas on olek
+
+-- 10 tund
+delete from Employee where Id = 6
+
+update vEmployeeDetails
+set Name = 'Johny', DepartmentName = 'IT'
+where Id = 1
+-- ei saa uuendada andmeid kuna mitu tabelit on sellest mõjutatud
+
+update vEmployeeDetails
+set DepartmentName = 'HR'
+where Id = 1
+--> vt vEmployeeDetails design (Views)
+
+select * from Department
+select * from Employee
+
+create trigger tr_EmployeeDetails_insteadOfUpdate
+on vEmployeeDetails
+instead of update
+as begin
+	if (update(Id))
+	begin
+		raiserror('Id cannot be changed', 16, 1)
+		return
+	end
+
+	if(update(DepartmentName))
+	begin
+		declare @DeptId int
+		select @DeptId = Department.Id
+		from Department
+		join inserted
+		on inserted.DepartmentName = Department.DepartmentName
+
+		if(@DeptId is null)
+		begin
+			raiserror('Invalid Department Name', 16, 1)
+			return
+		end
+
+		update Employee set DepartmentId = @DeptId
+		from inserted
+		join Employee
+		on Employee.Id = Inserted.id
+	end
+
+	if(update(Gender))
+	begin
+		update Employee set Gender = inserted.Gender
+		from inserted
+		join Employee
+		on Employee.Id = inserted.id
+	end
+
+	if(update(Name))
+	begin
+		update Employee set Name = inserted.Name
+		from inserted
+		join Employee
+		on Employee.Id = inserted.id
+	end
+end
+
+update Employee set Name = 'John123', Gender = 'Male', DepartmentId = 3
+where Id = 1
+
+select * from vEmployeeDetails
+
+--delete trigger
+create view vEmployeeCount
+as
+select DepartmentId, DepartmentName, count(*) as TotalEmployees
+from Employee
+join Department
+on Employee.DepartmentId = Department.Id
+group by DepartmentName, DepartmentId
+
+select * from vEmployeeCount
+-- tahan näha ainult neid osakondasid, kus on kaks ja rohkem töötajaid
+-- kasutada vEmployeeCount
+
+select * from vEmployeeCount
+where TotalEmployees > 1
+
+select DepartmentName, DepartmentId, count(*) as TotalEmployees
+into #TempEmployeeCount
+from Employee
+join Department
+on Employee.DepartmentId = Department.Id
+group by DepartmentName, DepartmentId
+
+select * from #TempEmployeeCount
+
+select DepartmentName, TotalEmployees
+from #TempEmployeeCount
+where TotalEmployees >= 2
+
+select * from sys.triggers
+
+create trigger trEmployeeDetails_InsteadOfDelete
+on vEmployeeDetails
+instead of delete
+as begin
+	delete Employee
+	from Employee
+	join deleted
+	on Employee.Id = deleted.Id
+end
+
+delete from vEmployeeDetails where Id = 2
+
+-- päitud tabelid ja CTE
+-- CTE Common Table Expression
+select * from Employee
+
+update Employee set Name = 'John'
+where Id = 1
+
+--CTE
+with EmployeeCount(DepartmentName, DepartmentId, TotalEmployees)
+as
+	(
+	select DepartmentName, DepartmentId, count(*) as TotalEmployees
+	from Employee
+	join Department
+	on Employee.DepartmentId = Department.Id
+	group by DepartmentName, DepartmentId
+	)
+select DepartmentName, TotalEmployees
+from EmployeeCount
+where TotalEmployees >= 2
+
+-- CTE-d võivad srnaneda temp table-ga
+-- sarnane päritud tabelile ja ei ole salvestatud objektina
+-- ning kestab päringu ulatuses
+
+-- päritud tabel
+select DepartmentName, TotalEmployees
+from
+	(
+	select DepartmentName, DepartmentId, count(*) as totalEmployees
+	from Employee
+	join Department
+	on Employee.DepartmentId = Department.Id
+	group by DepartmentName, DepartmentId
+	)
+as EmployeeCount
+where TotalEmployees >= 2
+
+
+-- mitu CTE-d järjest
+with EmployeeCountBy_Payroll_IT_Dept(DepartmentName, Total)
+as
+	(
+	select DepartmentName, count(Employee.Id) as TotalEmployees
+	from Employee
+	join Department
+	on Employee.DepartmentId = Department.Id
+	where DepartmentName in ('Payroll', 'IT')
+	group by DepartmentName
+	),
+EmployeesCountBy_HR_Admin_Dept(DepartmentName, Total)
+as
+	(
+	select DepartmentName, Count(Employee.Id) as TotalEmployees
+	from Employee
+	join Department
+	on Employee.DepartmentId = Department.Id
+	group by DepartmentName
+	)
+-- kui on kaks CTE-d, siis unioni abil ühendada päringud
+select * from EmployeeCountBy_Payroll_IT_Dept
+union
+select * from EmployeesCountBy_HR_Admin_Dept
+---
+
+with EmployeeCount(DepartmentId, TotalEmployees)
+as
+	(
+	select DepartmentId, count(*) as TotalEmployees
+	from Employee
+	group by DepartmentId
+	)
+-- select 'Hello'
+--- peale CTE-d peab kohe tulema käsklus SELECT, INSERT, UPDATE või DELETE
+--- kui proovid midagi muud, siis tuleb veateade
+select DepartmentName, TotalEmployees
+from Department
+join EmployeeCount
+on Department.Id = EmployeeCount.DepartmentId
+order by TotalEmployees
+
+-- uuendamine CTE-s
+-- loome lihtsa CTE
+with Employees_Name_Gender
+as
+(
+	select Id, Name, Gender from Employee
+)
+select * from Employees_Name_Gender
+
+-- uuendame andmeid läbi CTE
+with Employees_Name_Gender
+as
+(
+	select Id, Name, Gender from Employee
+)
+update Employees_Name_Gender set Gender = 'Female' where Id = 1
+
+select * from Employee
+
+-- kasutame joini CTE tegemisel
+with EmployeesByDepartment
+as
+(
+select Employee.Id, Name, Gender, DepartmentName
+from Employee
+join Department
+on Department.Id = Employee.DepartmentId
+)
+select * from EmployeesByDepartment
+
+-- kasutame joini ja muudame ühes tabelis andmeid
+with EmployeesByDepartment
+as
+(
+select Employee.Id, Name, Gender, DepartmentName
+from Employee
+join Department
+on Department.Id = Employee.DepartmentId
+)
+update EmployeesByDepartment set Gender = 'Male' where Id = 1
+
+select * from Employee
+
+-- kasutame joini ja muudame mõlemas tabelis andeid
+with EmployeesByDepartment
+as
+(
+select Employee.Id, Name, Gender, DepartmentName
+from Employee
+join Department
+on Department.Id = Employee.DepartmentId
+)
+update EmployeesByDepartment set Gender = 'Male', DepartmentName = 'IT' 
+where Id = 1
+-- ei luba
+
+with EmployeesByDepartment
+as
+(
+select Employee.Id, Name, Gender, DepartmentName
+from Employee
+join Department
+on Department.Id = Employee.DepartmentId
+)
+update EmployeesByDepartment set DepartmentName = 'IT' 
+where Id = 1
+
+--- kokkuvõte CTE-st
+-- 1. kui CTE baseerub ühel tabelil, siis uuendus töötab
+-- 2. kui CTE baseerub mitmel tabelil, siis tuleb veateade
+-- 3. kui CTE baseerub mitmel tabelil ja tahame muuta ainult ühte tabelit, siis uuendus saab tehtud
+
+-- kordeuv CTE
+-- CTE, mis iseendale viitab, kutsutakse korduvaks CTE-ks
+-- kui tahad andmeid näidata hierarhiliselt
+
+truncate table Employee
+
+
+insert into Employee (Id, Name, ManagerId)
+values (1, 'Tom', 2),
+(2, 'Josh', NULL),
+(3, 'Mike', 2),
+(4, 'John', 3),
+(5, 'Pam', 1),
+(6, 'Mary', 3),
+(7, 'James', 1),
+(8, 'Sam', 5),
+(9, 'Simon', 1)
+
+select * from Employee
+
+-- üks võimalus on teha self join
+-- ja kuvada NULL veeru asemel Super Boss
+select Emp.Name as [Employee Name],
+ISNULL(Manager.Name, 'Super Boss') as [Manager Name]
+from dbo.Employee Emp
+left join Employee Manager
+on Emp.ManagerId = Manager.Id
+
+--
+with EmployeesCTE(Id, Name, ManagerId, [Level])
+as
+(
+	select Employee.Id, Name, ManagerId, 1
+	from Employee
+	where ManagerId is null
+
+	union all
+
+	select Employee.Id, Employee.Name,
+	Employee.ManagerId, EmployeesCTE.[Level] + 1
+	from Employee
+	join EmployeesCTE
+	on Employee.ManagerId = EmployeesCTE.Id
+)
+
+select EmpCTE.Name as Employee, isnull(MgrCTE.Name, 'Super Boss') as Manager, EmpCTE.[Level]
+from EmployeesCTE EmpCTE
+left join EmployeesCTE MgrCTE
+on EmpCTE.ManagerId = MgrCTE.Id
+
+--PIVOT
+create table ProductSales
+(
+SalesAgent nvarchar(50),
+SalesCountry nvarchar(50),
+SalesAmount int
+)
+
+insert into ProductSales
+values('Tom', 'UK', 200),
+('John', 'US', 180),
+('John', 'UK', 260),
+('David', 'India', 450),
+('Tom', 'India', 350),
+('David', 'US', 200),
+('Tom', 'US', 130),
+('John', 'India', 540),
+('John', 'UK', 120),
+('David', 'UK', 220),
+('John', 'UK', 420),
+('David', 'US', 320),
+('Tom', 'US', 340),
+('Tom', 'UK', 660),
+('John', 'India', 430),
+('David', 'India', 230),
+('David', 'India', 280),
+('Tom', 'UK', 480),
+('John', 'UK', 360),
+('David', 'UK', 140)
+
+select * from ProductSales
+
+select SalesCountry, SalesAgent, sum(SalesAmount) as Total
+from ProductSales
+group by SalesCountry, SalesAgent
+order by SalesCountry, SalesAgent
+
+-- pivot näide
+select SalesAgent, India, US, UK
+from ProductSales
+pivot
+(
+sum(SalesAmount) for SalesCountry in ([India], [US], [UK])
+)
+as PivotTable
+
+-- päring muudab unikaalsete veergude väärtust (India, US ja UK) SalesCountry veerus omaette veerudeks koos veergude SalesAmount liitmisega
+
+create table ProductSalesWithId
+(Id int primary key,
+SalesAgent nvarchar(50),
+SalesCountry nvarchar(50),
+SalesAmount int)
+
+
+insert into ProductSalesWithId
+values(1,'Tom', 'UK', 200),
+(2,'John', 'US', 180),
+(3,'John', 'UK', 260),
+(4,'David', 'India', 450),
+(5,'Tom', 'India', 350),
+(6,'David', 'US', 200),
+(7,'Tom', 'US', 130),
+(8,'John', 'India', 540),
+(9,'John', 'UK', 120),
+(10,'David', 'UK', 220),
+(11,'John', 'UK', 420),
+(12,'David', 'US', 320),
+(13,'Tom', 'US', 340),
+(14,'Tom', 'UK', 660),
+(15,'John', 'India', 430),
+(16,'David', 'India', 230),
+(17,'David', 'India', 280),
+(18,'Tom', 'UK', 480),
+(19,'John', 'UK', 360),
+(20,'David', 'UK', 140)
+
+select SalesAgent, India, US, UK
+from ProductSalesWithId
+pivot
+(
+sum(SalesAmount) for SalesCountry in ([India], [US], [UK])
+)
+as PivotTable
+
+-- põhjuseks on Id veeru olemasolu ProductSalesWithId, mida võtakse arvesse pööramise ja grupeerimise järgi
+
+select SalesAgent, India, US, UK
+from
+(
+select SalesAgent, SalesCountry, SalesAmount from ProductSalesWithId
+)
+as SourceTable
+pivot
+(
+sum(SalesAmount) for SalesCountry in (India, US, UK)
+)
+as PivotTable
+
+--UNPIVOT
+-- kasutada ProductSalesWithId
+select Id, FromAgentOrCountry, CountryOrAgent
+from
+(
+select Id, SalesAgent, SalesCountry, SalesAmount
+from ProductSalesWithId
+) as SourceTable
+UNPIVOT
+(
+CountryOrAgent for FromAgentOrCountry in (SalesAgent, SalesCountry)
+)
+as PivotTable
+
+--- transactions
+-- transaction jälgib järgmisi samme
+-- 1. selle algus
+-- 2. käivitab DB käske
+-- 3. kontrollib vigu. kui on viga, siis taastab algse oleku
+
+create table MailingAddress
+(
+Id int not null primary key,
+EmployeeNumber int,
+HouseNumber nvarchar(50),
+StreetAddress nvarchar(50),
+City nvarchar(10),
+PostalCode nvarchar(20)
+)
+
+insert into MailingAddress
+values(1, 101,'#10', 'King Street', 'Londoon', 'CR27DW')
+
+create table PhysicalAddress
+(
+Id int not null primary key,
+EmployeeNumber int,
+HouseNumber nvarchar(50),
+StreetAddress nvarchar(50),
+City nvarchar(10),
+PostalCode nvarchar(20)
+)
+
+insert into PhysicalAddress
+values(1, 101,'#10', 'King Street', 'Londoon', 'CR27DW')
+
+create proc spUpdateAddress2
+as begin
+	begin try
+		begin transaction
+			update MailingAddress set City = 'LONDON'
+			where MailingAddress.Id = 1 and EmployeeNumber = 101
+
+			update PhysiclAddress set City = 'LONDON'
+			where PhysicalAddress.Id = 1 and EmployeeNumber = 101
+		commit transaction
+	end try
+	begin catch
+		rollback tran
+	end catch
+end
+
+spUpdateAddress2
+
+select * from MailingAddress
+select * from PhysicalAddress
+
+alter proc spUpdateAddress2
+as begin
+	begin try
+		begin transaction
+			update MailingAddress set City = 'LONDON 12'
+			where MailingAddress.Id = 1 and EmployeeNumber = 101
+
+			update PhysiclAddress set City = 'LONDON LONDON'
+			where PhysicalAddress.Id = 1 and EmployeeNumber = 101
+		commit transaction
+	end try
+	begin catch
+		rollback tran
+	end catch
+end
+
+-- kui teine uuendus ei lähe läbi, siis esimene ei lähe ka läbi
+-- kõik uuendused peavad läbi minema
+
+-- tund 11
+-- A - atomic - aatomiikus
+-- C - consistent e järjepidevus
+-- I - isolated e isoleeritud
+-- D - durable e vastupidav
+
+-- Atomic - kõik tehingud transactionis on kas edukalt täidetud või need lüükatakse tagasi.
+---- Nt: mõlemad käsud peaksid alati õnnestuma.
+---- Andmebaas teeb sellisel juhul: võtab esimese update tagasi ja veeretab selle algasendisse
+---- e tagastab algsed andmed
+
+-- Consistent - kõik transactionipuudutavad andmed jäetakse loogiliselt järjepidevasse olekusse.
+---- Nt: kui laos saadaval olevaid esemete hulka vähendatakse siis tabelis peab olema vastav kanne
+---- Inventuur ei saa lihtsalt kaduda.
+
+-- Isolated - transactsion peab andmeid mõjutama, sekkumata teistesse samaaegsetesse transactsionitesse.
+---- See takistab andmete muutmist, mis põhinevad sidumata tabelitel.
+---- Nt: muudatused kirjas, mis hiljem tagasi muudetakse.
+---- Enamik DB-d kasutab tehingute isoleerimise säilitamiseks lukustamist
+
+-- Durable - kui muudatus on tehud, siis see on püsiv.
+---- Kui on süsteemiviga või voolukatkestus ilmneb enne käskude komplekti valmimist,
+---- siis tühistatakse need käsud ja andmed taastakse algsesse olekusse.
+---- Taastamine toimub peale süsteemi taaskäivitamist.
+
+
+-- subqueries
+
+SELECT * FROM Product
+TRUNCATE TABLE Product
+TRUNCATE TABLE ProductSales
+
+DROP TABLE ProductSales
+
+CREATE TABLE Product
+(
+Id int primary key,
+Name nvarchar(50),
+Description nvarchar(250)
+)
+
+CREATE TABLE ProductSales
+(
+Id int primary key identity,
+ProductId int foreign key references Product(Id),
+UnitPrice int,
+QuantitySold int
+)
+
+INSERT INTO Product VALUES
+(1,'TV', '52 inch black color LCD TV'),
+(2,'Laptop', 'Very thin black color laptop'),
+(3,'Desktop', 'HP high performance desktop')
+
+INSERT INTO ProductSales VALUES
+(3, 450, 5),
+(2, 250, 7),
+(3, 450, 4)
+
+SELECT * FROM Product
+SELECT * FROM ProductSales
+
+-- kirjutame päringu, mis annab infot müümata toodetest
+SELECT Id, Name, Description
+FROM Product
+WHERE Id not in (SELECT DISTINCT ProductId
+				FROM ProductSales)
+
+-- enamus juhtudel saab subqueriest asendada JOIN-ga
+-- teeme sama päringu JOIN-ga
+SELECT Product.Id, Name, Description
+FROM Product
+LEFT JOIN ProductSales
+ON Product.Id = ProductSales.ProductId
+WHERE ProductSales.Product IS NULL
+
+-- teeme subquery kus kasutame select-i.
+-- Saame teada NAME ja TotalQuantity veeru andmeid
+SELECT Name, 
+(SELECT SUM(QuantitySold)
+FROM ProductSales
+WHERE ProductId = Product.Id) AS [Total Quantity]
+FROM Product
+ORDER BY Name
+
+-- tehke sama tulemus ja aga kasutage JOIN
+SELECT Name, SUM(QuantitySold) AS TotalQuantity
+FROM Product
+LEFT JOIN ProductSales
+ON Product.Id = ProductSales.ProductId
+GROUP BY Name
+ORDER BY Name
+
+-- subquery saab subquery sisse panna
+-- subquerid on alati sulgudes ja neid nimetatakse sisemiseks päringuteks
+
+DROP TABLE ProductSales 
+DROP TABLE Product
+
+CREATE TABLE Product
+(
+Id int primary key,
+Name nvarchar(50),
+Description nvarchar(250)
+)
+
+CREATE TABLE ProductSales
+(
+Id int primary key identity,
+ProductId int foreign key references Product(Id),
+UnitPrice int,
+QuantitySold int
+)
+
